@@ -78,5 +78,7 @@ gdt_end:
 CODE_SEL equ 0x08
 DATA_SEL equ 0x10
 
-
+section .text
+extern 3d_begin
+jmp 3d_begin
 hlt
