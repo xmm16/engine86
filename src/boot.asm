@@ -8,7 +8,10 @@ start:
     mov es, ax
     mov ss, ax
     mov sp, 0x7C00
-    
+
+
+
+
 
     mov [dap_num_sectors], word 127 
     mov [dap_offset], word 0x7E00 
@@ -21,22 +24,20 @@ start:
     mov dl, 0x80   
     int 0x13
     jc disk_error
-index:
+idx_53479354:
     dw 4
-looper:
+loop_2054387:
     add dword [dap_lba], 127
     mov cx, 127
-    dec cx
-    adv:
+    advance_offset1:
         add word [dap_offset], 512
-        dec cx
-        jnz adv
+        loop advance_offset1
     mov word [dap_num_sectors], 127
     int 0x13
     jc disk_error
     sub word [idx_53479354], 1
     cmp word [idx_53479354], 0
-    jne looper 
+    jne loop_2054387
 
 
 

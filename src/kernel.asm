@@ -1,4 +1,6 @@
+
 org 0x7E00
+
 start:
     cli
     xor ax, ax
@@ -15,12 +17,14 @@ start:
     mov cx, 0x11F
     mov di, mode_info
     int 0x10
+    
+    
 
     mov eax, [mode_info + 0x28]
-    mov [lfb_a], eax
+    mov [lfb_addr], eax
 
     movzx eax, word [mode_info + 0x10]
-    mov [lfb_p], eax 
+    mov [lfb_pitch], eax 
 
     lgdt [gdt_desc]
 
@@ -41,7 +45,7 @@ pm_start:
     mov ss, ax
     mov esp, 0x90000
 
-    mov esi, [lfb_a]
+    mov esi, [lfb_addr]
 
 
     mov eax, cr0
@@ -53,11 +57,16 @@ pm_start:
     or  eax, 0x600
     mov cr4, eax
 
+
+
+
+
+
 section .data
 
 align 4
-lfb_a: dd 0
-lfb_p: dd 0
+lfb_addr: dd 0
+lfb_pitch: dd 0
 zero: dd 0
 NULL: dd 0
 KEYS dd 128 dup(0)
@@ -78,7 +87,55 @@ gdt_end:
 CODE_SEL equ 0x08
 DATA_SEL equ 0x10
 
-section .text
-jmp 0x8200
 
-times 1024-($-$$) db 0
+
+
+
+; KX86 STARTS HERE
+
+
+
+
+
+idxVar:
+dd 1
+
+section .text
+
+    mov esi, [lfb_addr]  
+    mov edx, [lfb_pitch]  
+
+    mov eax, __float32__(50.1)
+    imul eax, edx         
+    add esi, eax
+    mov edi, esi
+
+    mov eax, 55
+    sub eax, 50          
+    mov ebx, eax
+
+row_loop9477:
+    push ebx                  
+    mov edi, esi
+    mov eax, 50
+    imul eax, 3              
+    add edi, eax         
+
+    mov eax, 55
+    sub eax, 50        
+    mov ecx, eax
+
+pixel_loop9477:
+    mov byte [edi], 0x00 
+    mov byte [edi+1], 0x00 
+    mov byte [edi+2], 0xFF 
+    add edi, 3
+    loop pixel_loop9477
+
+    pop ebx
+    add esi, edx        
+    dec ebx
+    jnz row_loop9477
+
+
+

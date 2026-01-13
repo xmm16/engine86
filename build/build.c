@@ -21,7 +21,13 @@ int stoi(char *str) {
   return result;
 }
 
-void clean() {
+int bash(char* command) {
+  char command_to_run[strlen(command) + 10 + 1];
+  sprintf(command_to_run, "bash -c '%s'", command);
+  return system(command_to_run);
+}
+
+void cleanup() {
   remove("kernel.asm.cat");
   remove("kernel.bin.cat");
   remove("boot.bin");
@@ -30,7 +36,10 @@ void clean() {
 int main(int argc, char **argv) {
   int filename_index = 0;
   int size_index = 0;
-  system("cat src/kernel.asm src/*[^kernel].asm > kernel.asm.cat");
+  if (bash("cat src/kernel.asm src/*[^kernel][^boot].asm > kernel.asm.cat")) {
+    cleanup();
+    return EXIT_FAILURE;
+  }
 
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "-o") == 0) {
@@ -61,7 +70,7 @@ int main(int argc, char **argv) {
       sprintf(command, "dd if=/dev/zero of=%s bs=512 count=%d",
               argv[filename_index], stoi(argv[size_index]));
 
-      if (system(command) != 0) {
+      if (bash(command) != 0) {
         cleanup();
         return EXIT_FAILURE;
       }
@@ -75,24 +84,24 @@ int main(int argc, char **argv) {
     return EXIT_FAILURE;
   }
   
-  if (system("nasm -f bin src/boot.asm -o boot.bin") != 0) {
+  if (bash("nasm -f bin src/boot.asm -o boot.bin") != 0) {
     cleanup();
     return EXIT_FAILURE;
   }
   
-  if (system("nasm -f bin kernel.asm.cat -o kernel.bin.cat") != 0) {
+  if (bash("nasm -f bin kernel.asm.cat -o kernel.bin.cat") != 0) {
     cleanup();
     return EXIT_FAILURE;
   }
   char command[200];
-  sprintf(command, "dd if=boot.bin of=%s bs=512 seek=0 conv=notrunc", arg[filename_index]);
-  if (system(command) != 0) {
+  sprintf(command, "dd if=boot.bin of=%s bs=512 seek=0 conv=notrunc", argv[filename_index]);
+  if (bash(command) != 0) {
     cleanup();
     return EXIT_FAILURE;
   }
   
-  sprintf(command, "dd if=kernel.bin.cat of=%s bs=512 seek=1 conv=notrunc", arg[filename_index]);
-  if (system(command) != 0) {
+  sprintf(command, "dd if=kernel.bin.cat of=%s bs=512 seek=1 conv=notrunc", argv[filename_index]);
+  if (bash(command) != 0) {
     cleanup();
     return EXIT_FAILURE;
   }

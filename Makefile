@@ -9,7 +9,7 @@ SIZE = 5000
 all: $(END)
 
 $(END): $(SRC)
-	$(COMPC) $(SRCC) -o $(ENDC) -lm
+	$(COMPC) $(SRCC) -o $(ENDC)
 	$(COMP) -o $(END) -s $(SIZE)
 
 clean:
