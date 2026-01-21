@@ -87,8 +87,5 @@ gdt_end:
 CODE_SEL equ 0x08
 DATA_SEL equ 0x10
 
-idxVar:
-dd 1
-
 section .text
 
