@@ -1,10 +1,8 @@
-pusha
-
 line:
-mov eax, 0 ; x1
-mov ebx, 0 ; y1
-mov ecx, 80 ; x2
-mov edx, 80 ; y2
+; mov eax, 0 ; x1
+; mov ebx, 0 ; y1
+; mov ecx, 80 ; x2
+; mov edx, 80 ; y2
 
 mov edi, edx
 sub edx, ebx
@@ -50,7 +48,7 @@ sub ebx, eax
 imul eax, edx
 add esi, eax
 
-row_loop:
+row_loop_line:
 mov edi, esi
 mov eax, [esp + 16]
 cmp eax, [esp + 8]
@@ -64,17 +62,17 @@ sub ecx, eax
 imul eax, 3
 add edi, eax
 
-pixel_loop:
+pixel_loop_line:
 mov byte [edi], 0x00
 mov byte [edi + 1], 0x00
 mov byte [edi + 2], 0xFF
 add edi, 3
 dec ecx
-jnz pixel_loop
+jnz pixel_loop_line
 
 add esi, edx
 dec ebx
-jnz row_loop
+jnz row_loop_line
 
 line_done:
-hlt
+ret

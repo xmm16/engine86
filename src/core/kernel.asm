@@ -89,3 +89,4 @@ DATA_SEL equ 0x10
 
 section .text
 
+pusha
