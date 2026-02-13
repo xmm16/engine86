@@ -1,6 +1,7 @@
 org 0x7e00
 bits 16
 
+section .text
 kernel_init:
     mov ax, 0x4f02
     mov bx, 0x11f | 0x4000
@@ -79,38 +80,164 @@ ap_pm_entry:
     sub esp, eax
     jmp parallel
 
+
+make_cube:
+    %define make_cube_ARG_struc_addr eax
+    %define make_cube_ARG_v_arr_addr ebx
+    ; uses xmm0, xmm1, xmm2
+
+    vmovaps xmm0, [make_cube_ARG_struc_addr]
+    vbroadcastss xmm1, dword [make_cube_ARG_struc_addr + CUBE.size]
+    vsubps xmm2, xmm0, xmm1
+    vmovaps [make_cube_ARG_v_arr_addr + 16*0], xmm2
+
+    vaddps xmm2, xmm0, xmm1
+    vmovaps [make_cube_ARG_v_arr_addr + 16*6], xmm2
+    ; ups because this isn't aligned after first push
+
+    ; xmm0: [px, py, pz, s]
+    ; xmm1: [s, s, s, s]
+    vxorps xmm1, xmm1, [XMM_GV_SIGN_MASK]
+    ; xmm1: [-s, s, s, s]
+
+    vsubps xmm2, xmm0, xmm1
+    vmovaps [make_cube_ARG_v_arr_addr + 16*1], xmm2
+
+    vaddps xmm2, xmm0, xmm1
+    vmovaps [make_cube_ARG_v_arr_addr + 16*7], xmm2
+
+    vshufps xmm1, xmm1, xmm1, 0b00001011
+    ; xmm1: [-s, -s, s, s]
+
+    vsubps xmm2, xmm0, xmm1
+    vmovaps [make_cube_ARG_v_arr_addr + 16*2], xmm2
+
+    vaddps xmm2, xmm0, xmm1
+    vmovaps [make_cube_ARG_v_arr_addr + 16*4], xmm2
+
+    vshufps xmm1, xmm1, xmm1, 0b10011011
+    ; xmm1: [s, -s, s, s]
+
+    vsubps xmm2, xmm0, xmm1
+    vmovaps [make_cube_ARG_v_arr_addr + 16*3], xmm2
+
+    vaddps xmm2, xmm0, xmm1
+    vmovaps [make_cube_ARG_v_arr_addr + 16*5], xmm2
+
+    ret
+
 parallel:
     mov eax, 0xFEE00020
     mov ebx, [eax]
     shr ebx, 24
+    lock inc dword [num_total_cores] ; atomics are fine to freely use until update loop
 
-    mov edi, [lfb_addr]
-    mov edx, ebx
-    imul ebx, 6
-    add edi, ebx
-    mov edx, 1024 * 3 * 100
-    add edi, edx
-    mov ebx, edx
+    %define WIDTH 1600
+    %define HEIGHT 1052
+    %define PIXEL_SIZE 3
+    %define SAMPLES_PER_AXIS 3
+    %define SAMPLES_PER_AXIS_SQ 9 ; SAMPLES_PER_AXIS squared
+    %define MAX_DEPTH 2
+    %define FOV 42.0
+    %define EPSILON 0.00001
+    %define CORE_NUM ebx
 
-    mov byte [edi], 0x00
-    mov byte [edi + 1], 0x00
-    mov byte [edi + 2], 0xFF
-    add edi, 3
-    mov byte [edi], 0x00
-    mov byte [edi + 1], 0x00
-    mov byte [edi + 2], 0xFF
-    add edi, 1600 * 3
-    mov byte [edi], 0x00
-    mov byte [edi + 1], 0x00
-    mov byte [edi + 2], 0xFF
+    %define COL_FLOOR_0 255.0
+    %define COL_FLOOR_1 255.0
+    %define COL_FLOOR_2 255.0
+
+    %define COL_MIRROR_0 25.5
+    %define COL_MIRROR_1 25.5
+    %define COL_MIRROR_2 25.5
+
+    %define COL_LIGHT_0 5610.0
+    %define COL_LIGHT_1 3825.0
+    %define COL_LIGHT_2 510.0
+
+    %define COL_SKY_0 1.275
+    %define COL_SKY_1 1.275
+    %define COL_SKY_2 2.55
+
+    cmp CORE_NUM, 0
+    jne root_setup_end
+
+root_setup: ; before the first frame begins
+    mov make_cube_ARG_struc_addr, cube_1
+    mov make_cube_ARG_v_arr_adr, make_cube_v
+    call make_cube
+    
+root_setup_end:
 
     cli
     hlt
     jmp $
 
+
+section .data
 align 4
 lfb_addr:  dd 0
 mode_info: times 256 db 0
+num_total_cores: dd 0
+XMM_GV_SIGN_MASK: dd 0x80000000
+GLOBAL_MAKE_CUBE_INDEX: 
+    dd 0, 1, 2
+    dd 0, 2, 3
+    dd 4, 5, 6
+    dd 4, 6, 7
+    dd 0, 4, 7
+    dd 0, 7, 3
+    dd 1, 5, 6
+    dd 1, 6, 2
+    dd 0, 1, 5
+    dd 0, 5, 4
+    dd 3, 2, 6
+    dd 3, 6, 7
+
+struc CUBE
+  .pos_x resb 4
+  .pos_y resb 4
+  .pos_z resb 4
+  
+  .size resb 4
+  
+  .color_x resb 4
+  .color_y resb 4
+  .color_z resb 4
+
+  .mat resb 4
+endstruc
+
+align 32
+cube_1:
+  istruc CUBE
+    at .pos_x dd -1.4
+    at .pos_y dd 0.8
+    at .pos_z dd 0.0
+    
+    at .size dd 0.8
+
+    at .color_x dd COL_MIRROR_0
+    at .color_y dd COL_MIRROR_1
+    at .color_z dd COL_MIRROR_2
+
+    at .mat dd 1
+  iend
+
+align 32
+cube_2:
+  istruc CUBE
+    at .pos_x dd 1.4
+    at .pos_y dd 0.8
+    at .pos_z dd 0.0
+    
+    at .size dd 0.8
+
+    at .color_x dd COL_LIGHT_0
+    at .color_y dd COL_LIGHT_1
+    at .color_z dd COL_LIGHT_2
+
+    at .mat dd 2
+  iend
 
 align 8
 gdt:
@@ -122,3 +249,9 @@ gdt_desc:
     dd gdt
 
 mcs_end:
+
+section .bss
+
+align 32
+make_cube_v_1: resb 4*4*8
+make_cube_v_2: resb 4*4*8
