@@ -1,6 +1,52 @@
 org 0x7e00
 bits 16
 
+%define WIDTH 1600
+%define HEIGHT 1052
+%define PIXEL_SIZE 3
+%define SAMPLES_PER_AXIS 3
+%define SAMPLES_PER_AXIS_SQ 9 ; samples per axis squared
+%define MAX_DEPTH 2
+%define FOV 42
+%define EPSILON 0.00001
+
+%define CORE_NUM 22
+%define FPS  60
+
+%define COL_FLOOR_0 255.0
+%define COL_FLOOR_1 255.0
+%define COL_FLOOR_2 255.0
+
+%define COL_MIRROR_0 25.5
+%define COL_MIRROR_1 25.5
+%define COL_MIRROR_2 25.5
+
+%define COL_LIGHT_0 5610.0
+%define COL_LIGHT_1 3825.0
+%define COL_LIGHT_2 510.0
+
+%define COL_SKY_0 1.275
+%define COL_SKY_1 1.275
+%define COL_SKY_2 2.55
+
+section .data
+align 4
+lfb_addr:  dd 0
+mode_info: times 256 db 0
+XMM_GV_SIGN_MASK: dd 0x80000000 ; 10000000000000000000000000000000000000000000000
+
+align 8
+gdt:
+    dq 0x0000000000000000
+    dq 0x00cf9a000000ffff
+    dq 0x00cf92000000ffff
+gdt_desc:
+    dw gdt_desc - gdt - 1
+    dd gdt
+
+mcs_end:
+
+section .bss
 section .text
 kernel_init:
     mov ax, 0x4f02
@@ -32,7 +78,7 @@ pm_start:
     mov ds, ax
     mov es, ax
     mov ss, ax
-    mov esp, 0x90000
+    mov esp, 0x9FFF0
 
     mov esi, ap_mcs
     mov edi, 0x10000
@@ -74,28 +120,116 @@ ap_pm_entry:
     mov eax, 0xFEE00020
     mov ebx, [eax]
     shr ebx, 24              
-    mov eax, 0x1000
-    mul ebx
-    mov esp, 0x90000
+    ; right now 50 triangles per core sample
+    ; and 1000 bytes worplace
+    mov eax, 100*50 + 4 + 1000  ; max size of the stack for the core, 100*NUM_TRIANGLES + SIZE_OF_NUMBER_OF_TRIANGLES + SIZE_OF_WORKPLACE all in bytes
+    mul ebx ; ebx stays the same
+    mov esp, 0x9FFF0 ; stack begin!
     sub esp, eax
+    add esp, 1000
+    and esp, -64 ; align to 64 bytes
     jmp parallel
 
 make_triangle:
+    %define make_cube_ARG_triangle_parameters esi
+    mov 
+    vmovaps xmm0, [make_cube_ARG_triangle_parameters]
+    vmovaps xmm1, [make_cube_ARG_triangle_parameters + 4]
+    vmovaps xmm2, [make_cube_ARG_triangle_parameters + 4*2]
+    vmovaps xmm2, [make_cube_ARG_triangle_parameters + 4*3]
+    
+
+    ret
 
 make_cube:
-    %define make_cube_ARG_struc_addr eax
-    %define make_cube_ARG_v_arr_addr edx
-    %define make_cube_ARG_triangle_parameters esi
-    ; also uses xmm0, xmm1, xmm2, ecx, edi
+    %define pos_x ebp-4
+    %define pos_y ebp-4*2
+    %define pos_z ebp-4*3
 
-    vmovaps xmm0, [make_cube_ARG_struc_addr]
+    %define size ebp-4*4
+
+    %define color_x ebp-4*5
+    %define color_y ebp-4*6
+    %define color_z ebp-4*7
+
+    %define mat ebp-4*8
+
+    %define verticies ebp-4*9
+    %define indexes (ebp-4*9)-(4*4*8)
+
+    mov eax, esp
+    mov esp, indexes
+    
+    push 0
+    push 1
+    push 2
+    push 0
+    
+    push 0
+    push 2
+    push 3
+    push 0
+
+    push 4
+    push 5
+    push 6
+    push 0
+
+    push 4
+    push 6
+    push 7
+    push 0
+    
+    push 0
+    push 4
+    push 7
+    push 0
+
+    push 0
+    push 7
+    push 3
+    push 0
+    
+    push 1
+    push 5
+    push 6
+    push 0
+    
+    push 1
+    push 6
+    push 2
+    push 0
+
+    push 0
+    push 1
+    push 5
+    push 0
+
+    push 0
+    push 5
+    push 4
+    push 0
+
+    push 3
+    push 2
+    push 6
+    push 0
+
+    push 3
+    push 6
+    push 7
+    push 0
+
+    mov esp, eax
+
+    vmovaps xmm0, [pos_x] ; loads pos 3d vector and size in xmm0
     ; xmm1: [s, s, s, s]
-    vbroadcastss xmm1, dword [make_cube_ARG_struc_addr + CUBE.size]
+    vbroadcastss xmm1, dword [size]
     vsubps xmm2, xmm0, xmm1
-    vmovaps [make_cube_ARG_v_arr_addr + 16*0], xmm2
+    vmovaps [indexes], xmm2
 
     vaddps xmm2, xmm0, xmm1
-    vmovaps [make_cube_ARG_v_arr_addr + 16*6], xmm2
+    vmovaps [indexes - 4*4*6], xmm2
     ; ups because this isn't aligned after first push
 
     ; xmm0: [px, py, pz, s]
@@ -104,10 +238,10 @@ make_cube:
     ; xmm1: [-s, s, s, s]
 
     vsubps xmm2, xmm0, xmm1
-    vmovaps [make_cube_ARG_v_arr_addr + 16*1], xmm2
+    vmovaps [indexes - 16*1], xmm2
 
     vaddps xmm2, xmm0, xmm1
-    vmovaps [make_cube_ARG_v_arr_addr + 16*7], xmm2
+    vmovaps [indexes - 16*7], xmm2
 
     ; xmm1:  0, 1, 2, 3
     ; xmm1: [5, 6, 7, 8]
@@ -118,194 +252,60 @@ make_cube:
     ; xmm1: [-s, -s, s, s]
 
     vsubps xmm2, xmm0, xmm1
-    vmovaps [make_cube_ARG_v_arr_addr + 16*2], xmm2
+    vmovaps [indexes - 16*2], xmm2
 
     vaddps xmm2, xmm0, xmm1
-    vmovaps [make_cube_ARG_v_arr_addr + 16*4], xmm2
+    vmovaps [indexes - 16*4], xmm2
 
     vshufps xmm1, xmm1, xmm1, 0b10011011
     ; xmm1: [s, -s, s, s]
 
     vsubps xmm2, xmm0, xmm1
-    vmovaps [make_cube_ARG_v_arr_addr + 16*3], xmm2
+    vmovaps [indexes - 16*3], xmm2
 
     vaddps xmm2, xmm0, xmm1
-    vmovaps [make_cube_ARG_v_arr_addr + 16*5], xmm2
+    vmovaps [indexes - 16*5], xmm2
 
     xor ecx, ecx
 make_cube_for_values_in_idx:
-    ; ecx + GLOBAL_MAKE_CUBE_INDEX + 4*0/1/2
-    mov edi, [ecx + GLOBAL_MAKE_CUBE_INDEX + 4*0] ; i1
-    mov edi, [edi*4 + make_cube_ARG_v_arr_addr]
-    mov [make_cube_ARG_triangle_parameters], edi
+    cmp ecx, 12
+    jge make_cube_for_values_in_idx_end
 
-    mov edi, [ecx + GLOBAL_MAKE_CUBE_INDEX + 4*1] ; i2
-    mov edi, [edi*4 + make_cube_ARG_v_arr_addr]
-    mov [make_cube_ARG_triangle_parameters + 4], edi
+    imul ecx, 4
+    vmovaps
 
-    mov edi, [ecx + GLOBAL_MAKE_CUBE_INDEX + 4*2] ; i3
-    mov edi, [edi*4 + make_cube_ARG_v_arr_addr]
-    mov [make_cube_ARG_triangle_parameters + 4*2], edi
+    inc ecx
+    jmp make_cube_for_values_in_idx
 
-    call make_triangle
-
-    add ecx, 12
-    cmp ecx, 144
-    jl make_cube_for_values_in_idx
-
+make_cube_for_values_in_idx_end:
     ret
 
 parallel:
-    mov eax, 0xFEE00020
-    mov ebx, [eax]
-    shr ebx, 24
-    lock inc dword [num_total_cores] ; atomics are fine to freely use until update loop
+; ebx is initialized to core register
 
-    %define WIDTH 1600
-    %define HEIGHT 1052
-    %define PIXEL_SIZE 3
-    %define SAMPLES_PER_AXIS 3
-    %define SAMPLES_PER_AXIS_SQ 9 ; SAMPLES_PER_AXIS squared
-    %define MAX_DEPTH 2
-    %define FOV 42.0
-    %define EPSILON 0.00001
-    %define CORE_NUM ebx
-
-    %define COL_FLOOR_0 255.0
-    %define COL_FLOOR_1 255.0
-    %define COL_FLOOR_2 255.0
-
-    %define COL_MIRROR_0 25.5
-    %define COL_MIRROR_1 25.5
-    %define COL_MIRROR_2 25.5
-
-    %define COL_LIGHT_0 5610.0
-    %define COL_LIGHT_1 3825.0
-    %define COL_LIGHT_2 510.0
-
-    %define COL_SKY_0 1.275
-    %define COL_SKY_1 1.275
-    %define COL_SKY_2 2.55
-
-    cmp CORE_NUM, 0
-    jmp root_setup_end
-
-
-root_setup: ; before the first frame begins
-    mov make_cube_ARG_struc_addr, cube_1
-    mov make_cube_ARG_v_arr_addr, make_cube_v_1
-    mov make_cube_ARG_triangle_parameters, make_cube_1_triangle_parameters
+    enter
+    push -1.4
+    push 0.8
+    push 0.0
+    push 0.8
+    push COL_MIRROR_0
+    push COL_MIRROR_1
+    push COL_MIRROR_2
+    push 1
     call make_cube
+    leave
 
-    mov make_cube_ARG_struc_addr, cube_2
-    mov make_cube_ARG_v_arr_addr, make_cube_v_2
-    mov make_cube_ARG_triangle_parameters, make_cube_2_triangle_parameters
+    enter
+    push 1.4
+    push COL_LIGHT_0
+    push COL_LIGHT_1
+    push COL_LIGHT_2
+    push 2
     call make_cube
-    
-root_setup_end:
-    mov edi, [lfb_addr]
-
-    mov byte [edi], 0x00
-    mov byte [edi+1], 0x00
-    mov byte [edi+2], 0xFF
-    mov edx, ebx
-    imul edx, 3
-    add edi, edx
-    mov edx, 1600*3
-    imul edx, ebx
-    add edi, edx
-
-    mov byte [edi], 0x00
-    mov byte [edi+1], 0x00
-    mov byte [edi+2], 0xFF
+    leave
 
     cli
     hlt
     jmp $
 
 
-section .data
-align 4
-lfb_addr:  dd 0
-mode_info: times 256 db 0
-num_total_cores: dd 0
-XMM_GV_SIGN_MASK: dd 0x80000000 ; 10000000000000000000000000000000000000000000000
-GLOBAL_MAKE_CUBE_INDEX: 
-    dd 0, 1, 2
-    dd 0, 2, 3
-    dd 4, 5, 6
-    dd 4, 6, 7
-    dd 0, 4, 7
-    dd 0, 7, 3
-    dd 1, 5, 6
-    dd 1, 6, 2
-    dd 0, 1, 5
-    dd 0, 5, 4
-    dd 3, 2, 6
-    dd 3, 6, 7
-
-struc CUBE
-  .pos_x: resb 4
-  .pos_y: resb 4
-  .pos_z: resb 4
-  
-  .size: resb 4
-  
-  .color_x: resb 4
-  .color_y: resb 4
-  .color_z: resb 4
-
-  .mat: resb 4
-endstruc
-
-align 32 ; ymm registers
-cube_1:
-  istruc CUBE
-    at .pos_x, dd -1.4
-    at .pos_y, dd 0.8
-    at .pos_z, dd 0.0
-    
-    at .size, dd 0.8
-
-    at .color_x, dd COL_MIRROR_0
-    at .color_y, dd COL_MIRROR_1
-    at .color_z, dd COL_MIRROR_2
-
-    at .mat, dd 1
-  iend
-
-align 32
-cube_2:
-  istruc CUBE
-    at .pos_x, dd 1.4
-    at .pos_y, dd 0.8
-    at .pos_z, dd 0.0
-    
-    at .size, dd 0.8
-
-    at .color_x, dd COL_LIGHT_0
-    at .color_y, dd COL_LIGHT_1
-    at .color_z, dd COL_LIGHT_2
-
-    at .mat, dd 2
-  iend
-
-align 8
-gdt:
-    dq 0x0000000000000000
-    dq 0x00cf9a000000ffff
-    dq 0x00cf92000000ffff
-gdt_desc:
-    dw gdt_desc - gdt - 1
-    dd gdt
-
-mcs_end:
-
-section .bss
-
-align 32
-make_cube_v_1: resb 4*4*8
-make_cube_v_2: resb 4*4*8
-
-make_cube_1_triangle_parameters: resb 4*3*2 + 4 ; 28 in total, not 32 aligned anymore
-make_cube_2_triangle_parameters: resb 4*3*2 + 4 ; 28 in total, not 32 aligned anymore
