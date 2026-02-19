@@ -142,20 +142,23 @@ make_triangle:
     ret
 
 make_cube:
+    ; aligned to 64
     %define pos_x ebp-4
     %define pos_y ebp-4*2
     %define pos_z ebp-4*3
 
     %define size ebp-4*4
 
+    ;aligned to 16
     %define color_x ebp-4*5
     %define color_y ebp-4*6
     %define color_z ebp-4*7
 
     %define mat ebp-4*8
 
+    ;aligned to 16
     %define verticies ebp-4*9
-    %define indexes (ebp-4*9)-(4*4*8)
+    %define indexes ebp-4*9-4*4*8
 
     mov eax, esp
     mov esp, indexes
@@ -226,10 +229,10 @@ make_cube:
     ; xmm1: [s, s, s, s]
     vbroadcastss xmm1, dword [size]
     vsubps xmm2, xmm0, xmm1
-    vmovaps [indexes], xmm2
+    vmovaps [verticies], xmm2
 
     vaddps xmm2, xmm0, xmm1
-    vmovaps [indexes - 4*4*6], xmm2
+    vmovaps [verticies - 16*6], xmm2
     ; ups because this isn't aligned after first push
 
     ; xmm0: [px, py, pz, s]
@@ -238,10 +241,10 @@ make_cube:
     ; xmm1: [-s, s, s, s]
 
     vsubps xmm2, xmm0, xmm1
-    vmovaps [indexes - 16*1], xmm2
+    vmovaps [verticies - 16*1], xmm2
 
     vaddps xmm2, xmm0, xmm1
-    vmovaps [indexes - 16*7], xmm2
+    vmovaps [verticies - 16*7], xmm2
 
     ; xmm1:  0, 1, 2, 3
     ; xmm1: [5, 6, 7, 8]
@@ -252,36 +255,40 @@ make_cube:
     ; xmm1: [-s, -s, s, s]
 
     vsubps xmm2, xmm0, xmm1
-    vmovaps [indexes - 16*2], xmm2
+    vmovaps [verticies - 16*2], xmm2
 
     vaddps xmm2, xmm0, xmm1
-    vmovaps [indexes - 16*4], xmm2
+    vmovaps [verticies - 16*4], xmm2
 
     vshufps xmm1, xmm1, xmm1, 0b10011011
     ; xmm1: [s, -s, s, s]
 
     vsubps xmm2, xmm0, xmm1
-    vmovaps [indexes - 16*3], xmm2
+    vmovaps [verticies - 16*3], xmm2
 
     vaddps xmm2, xmm0, xmm1
-    vmovaps [indexes - 16*5], xmm2
+    vmovaps [verticies - 16*5], xmm2
 
+    enter
     xor ecx, ecx
 make_cube_for_values_in_idx:
     cmp ecx, 12
     jge make_cube_for_values_in_idx_end
 
     imul ecx, 4
-    vmovaps
+    vmovaps xmm0, [indexes + ecx] ; loads the indexes
+
 
     inc ecx
     jmp make_cube_for_values_in_idx
 
 make_cube_for_values_in_idx_end:
+    leave
     ret
 
 parallel:
 ; ebx is initialized to core register
+    mov ebp, esp
 
     enter
     push -1.4
