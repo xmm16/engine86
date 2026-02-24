@@ -269,21 +269,35 @@ make_cube:
     vaddps xmm2, xmm0, xmm1
     vmovaps [verticies - 16*5], xmm2
 
-    enter
     xor ecx, ecx
 make_cube_for_values_in_idx:
     cmp ecx, 12
     jge make_cube_for_values_in_idx_end
 
     imul ecx, 4
-    vmovaps xmm0, [indexes + ecx] ; loads the indexes
+    mov eax, [indexes + ecx + 0]
+    mov eax, [eax * 4 + verticies]
+    push eax
 
+    mov eax, [indexes + ecx + 4]
+    mov eax, [eax * 4 + verticies]
+    push eax
+
+    mov eax, [indexes + ecx + 8]
+    mov eax, [eax * 4 + verticies]
+    push eax
+    
+    mov eax, [color_x]
+    push eax
+    mov eax, [color_y]
+    push eax
+    mov eax, [color_z]
+    push eax
 
     inc ecx
     jmp make_cube_for_values_in_idx
 
 make_cube_for_values_in_idx_end:
-    leave
     ret
 
 parallel:
