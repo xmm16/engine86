@@ -34,6 +34,8 @@ align 4
 lfb_addr:  dd 0
 mode_info: times 256 db 0
 XMM_GV_SIGN_MASK: dd 0x80000000 ; 10000000000000000000000000000000000000000000000
+num_cores: dd 0
+state: dd 0 ; should be equal to num_cores before switching modes both ways, from calc to graph or from graph to calc
 
 align 8
 gdt:
@@ -122,208 +124,38 @@ ap_pm_entry:
     shr ebx, 24              
     ; right now 50 triangles per core sample
     ; and 1000 bytes worplace
-    mov eax, 100*50 + 4 + 1000  ; max size of the stack for the core, 100*NUM_TRIANGLES + SIZE_OF_NUMBER_OF_TRIANGLES + SIZE_OF_WORKPLACE all in bytes
+    mov eax, 100*50 + 4 + 4 + 3000  ; max size of the stack for the core, 100*MAX_NUM_TRIANGLES + SIZE_OF_NUMBER_OF_TRIANGLES + SIZE_OF_CORE_ID + SIZE_OF_WORKPLACE all in bytes
     mul ebx ; ebx stays the same
     mov esp, 0x9FFF0 ; stack begin!
     sub esp, eax
-    add esp, 1000
-    and esp, -64 ; align to 64 bytes
     jmp parallel
 
-make_triangle:
-    %define make_cube_ARG_triangle_parameters esi
-    mov 
-    vmovaps xmm0, [make_cube_ARG_triangle_parameters]
-    vmovaps xmm1, [make_cube_ARG_triangle_parameters + 4]
-    vmovaps xmm2, [make_cube_ARG_triangle_parameters + 4*2]
-    vmovaps xmm2, [make_cube_ARG_triangle_parameters + 4*3]
-    
-
-    ret
-
-make_cube:
-    ; aligned to 64
-    %define pos_x ebp-4
-    %define pos_y ebp-4*2
-    %define pos_z ebp-4*3
-
-    %define size ebp-4*4
-
-    ;aligned to 16
-    %define color_x ebp-4*5
-    %define color_y ebp-4*6
-    %define color_z ebp-4*7
-
-    %define mat ebp-4*8
-
-    ;aligned to 16
-    %define verticies ebp-4*9
-    %define indexes ebp-4*9-4*4*8
-
-    mov eax, esp
-    mov esp, indexes
-    
-    push 0
-    push 1
-    push 2
-    push 0
-    
-    push 0
-    push 2
-    push 3
-    push 0
-
-    push 4
-    push 5
-    push 6
-    push 0
-
-    push 4
-    push 6
-    push 7
-    push 0
-    
-    push 0
-    push 4
-    push 7
-    push 0
-
-    push 0
-    push 7
-    push 3
-    push 0
-    
-    push 1
-    push 5
-    push 6
-    push 0
-    
-    push 1
-    push 6
-    push 2
-    push 0
-
-    push 0
-    push 1
-    push 5
-    push 0
-
-    push 0
-    push 5
-    push 4
-    push 0
-
-    push 3
-    push 2
-    push 6
-    push 0
-
-    push 3
-    push 6
-    push 7
-    push 0
-
-    mov esp, eax
-
-    vmovaps xmm0, [pos_x] ; loads pos 3d vector and size in xmm0
-    ; xmm1: [s, s, s, s]
-    vbroadcastss xmm1, dword [size]
-    vsubps xmm2, xmm0, xmm1
-    vmovaps [verticies], xmm2
-
-    vaddps xmm2, xmm0, xmm1
-    vmovaps [verticies - 16*6], xmm2
-    ; ups because this isn't aligned after first push
-
-    ; xmm0: [px, py, pz, s]
-    ; xmm1: [s, s, s, s]
-    vxorps xmm1, xmm1, [XMM_GV_SIGN_MASK]
-    ; xmm1: [-s, s, s, s]
-
-    vsubps xmm2, xmm0, xmm1
-    vmovaps [verticies - 16*1], xmm2
-
-    vaddps xmm2, xmm0, xmm1
-    vmovaps [verticies - 16*7], xmm2
-
-    ; xmm1:  0, 1, 2, 3
-    ; xmm1: [5, 6, 7, 8]
-    ; xmm1: [5, 7, 6, 6]
-    ;        0, 2, 1, 1
-    ;        0b00100101
-    vshufps xmm1, xmm1, xmm1, 0b00001011
-    ; xmm1: [-s, -s, s, s]
-
-    vsubps xmm2, xmm0, xmm1
-    vmovaps [verticies - 16*2], xmm2
-
-    vaddps xmm2, xmm0, xmm1
-    vmovaps [verticies - 16*4], xmm2
-
-    vshufps xmm1, xmm1, xmm1, 0b10011011
-    ; xmm1: [s, -s, s, s]
-
-    vsubps xmm2, xmm0, xmm1
-    vmovaps [verticies - 16*3], xmm2
-
-    vaddps xmm2, xmm0, xmm1
-    vmovaps [verticies - 16*5], xmm2
-
-    xor ecx, ecx
-make_cube_for_values_in_idx:
-    cmp ecx, 12
-    jge make_cube_for_values_in_idx_end
-
-    imul ecx, 4
-    mov eax, [indexes + ecx + 0]
-    mov eax, [eax * 4 + verticies]
-    push eax
-
-    mov eax, [indexes + ecx + 4]
-    mov eax, [eax * 4 + verticies]
-    push eax
-
-    mov eax, [indexes + ecx + 8]
-    mov eax, [eax * 4 + verticies]
-    push eax
-    
-    mov eax, [color_x]
-    push eax
-    mov eax, [color_y]
-    push eax
-    mov eax, [color_z]
-    push eax
-
-    inc ecx
-    jmp make_cube_for_values_in_idx
-
-make_cube_for_values_in_idx_end:
-    ret
+graphics: ; each core jumps to this in between updating, including inactive for calculation cores, so divide by the num_cores
 
 parallel:
 ; ebx is initialized to core register
     mov ebp, esp
+    lock inc num_cores 
 
-    enter
-    push -1.4
-    push 0.8
-    push 0.0
-    push 0.8
-    push COL_MIRROR_0
-    push COL_MIRROR_1
-    push COL_MIRROR_2
-    push 1
-    call make_cube
-    leave
+    %define CORE_ID ebp-4
+    push ebx
 
-    enter
-    push 1.4
-    push COL_LIGHT_0
-    push COL_LIGHT_1
-    push COL_LIGHT_2
-    push 2
-    call make_cube
-    leave
+    %define NUM_TRIANGLES ebp-8
+    push ______________ ; put number of triangles there
+
+    and esp, -64 ; align to 64 bytes
+    ; align to 64 bytes after each triangle too
+
+    cmp ebx, 0
+    je core_0
+
+
+; ok so basically here we define objects owned by cores
+; you don't have to use all cores
+; in each core, you have to use graphics
+
+core_0:
+    ; define objects of triangles here
 
     cli
     hlt
