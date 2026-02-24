@@ -124,7 +124,7 @@ ap_pm_entry:
     shr ebx, 24              
     ; right now 50 triangles per core sample
     ; and 1000 bytes worplace
-    mov eax, 100*50 + 4 + 4 + 3000  ; max size of the stack for the core, 100*MAX_NUM_TRIANGLES + SIZE_OF_NUMBER_OF_TRIANGLES + SIZE_OF_CORE_ID + SIZE_OF_WORKPLACE all in bytes
+    mov eax, 100*50 + 4 + 4 + 64 + 3000  ; max size of the stack for the core, 100*MAX_NUM_TRIANGLES + SIZE_OF_NUMBER_OF_TRIANGLES + SIZE_OF_CORE_ID + CACHE_LINE_SPACE + SIZE_OF_WORKPLACE all in bytes
     mul ebx ; ebx stays the same
     mov esp, 0x9FFF0 ; stack begin!
     sub esp, eax
@@ -142,12 +142,13 @@ loop_back_compare_state:
 
 parallel:
 ; ebx is initialized to core register
+    and esp, -4 ; aligns to 4 bytes
     mov ebp, esp
     lock inc dword [num_cores]
 
-    and esp, -4 ; aligns to 4 bytes
     %define CORE_ID ebp-4
     push ebx
+    sub esp, 64 ; subtract 64 to seperate core_id from the triangle cache lines
 
     %define NUM_TRIANGLES ebp-8
     push ______________ ; put number of triangles there
@@ -182,13 +183,19 @@ loop_forward_compare_state_core_0:
     cmp dword [state], dword [num_cores]
     jne loop_forward_compare_state_core_0
     call graphics
+    jmp core_0_update
 
 core_1:
     ; define objects of triangles here
     ; then have an infinite loop while calling graphics after all calculations
 
 core_1_update:
-
+; this is an example for when you're done with core 1 code, if you want core 2 to access it too !!!!!!!!!!!!!!!
+; core 1 normal code is here
+; mov dword [CORE_ID], 2
+; wait_for_core_2_to_finish_with_core_1:
+; cmp dword [CORE_ID], 1
+; jne wait_for_core_2_to_finish_with_core_1
 
 
     lock inc dword [state]
@@ -196,12 +203,23 @@ loop_forward_compare_state_core_1:
     cmp dword [state], dword [num_cores]
     jne loop_forward_compare_state_core_1
     call graphics
+    jmp core_1_update
 
 core_2:
     ; define objects of triangles here
     ; then have an infinite loop while calling graphics after all calculations
 
 core_2_update:
+; this is an example for when you're done with core 1 code, if you want core 2 to access it too !!!!!!!!!!!!!!!
+; core 2 normal code is here
+; mov eax, 0x9FFF0 - (1*(100*50 + 4 + 4 + 64 + 3000))
+; and eax, -4
+; sub eax, 4
+; wait_for_core_1_to_finish_with_core_1_from_core_2:
+; cmp dword [eax], 2
+; jne wait_for_core_1_to_finish_with_core_1_from_core_2
+; DO OPERATIONS ON CORE_1 OBJECTS HERE
+; mov dword [eax], 1
 
 
 
@@ -210,7 +228,7 @@ loop_forward_compare_state_core_2:
     cmp dword [state], dword [num_cores]
     jne loop_forward_compare_state_core_2
     call graphics
-
+    jmp core_2_update
 
 core_unassigned:
     lock inc dword [state]
