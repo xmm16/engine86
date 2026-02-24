@@ -32,6 +32,7 @@ bits 16
 section .data
 align 4
 lfb_addr:  dd 0
+KEYS: dd 128 dup(0)
 mode_info: times 256 db 0
 XMM_GV_SIGN_MASK: dd 0x80000000 ; 10000000000000000000000000000000000000000000000
 num_cores: dd 0
@@ -155,6 +156,9 @@ parallel:
 
     and esp, -64 ; align to 64 bytes
     ; align to 64 bytes after each triangle too
+    
+    cmp dword [num_cores], 3 ; this doesn't meet minimum core requirements
+    jne force_quit
 
     cmp ebx, 0
     je core_0
@@ -175,8 +179,35 @@ core_0:
     ; then have an infinite loop while calling graphics after all calculations
 
 core_0_update:
+    
+; shift escape to see if the program needs to be killed
+force_quit_check:
+    in al, 0x64
+    test al, 1
+    jz force_quit_check_done
+    in al, 0x60
+    cmp al, 0x80
+    jb force_quit_check_pressed
+    sub al, 0x80
+    mov byte [KEYS+eax], 0
+    jmp force_quit_check_done
 
+force_quit_check_pressed:
+    mov byte [KEYS+eax], 1
 
+force_quit_check_done:
+    cmp byte [KEYS+0x01], 1
+    jne force_quit_check_false
+    sub byte [KEYS+0x01], 1
+    jmp force_quit_check_esc_pressed_true
+
+force_quit_check_esc_pressed_true:
+    cmp byte [KEYS+0x2A], 1
+    jne force_quit_check_false
+    sub byte [KEYS+0x2A], 1
+    jmp force_quit
+
+force_quit_check_false:
 
     lock inc dword [state]
 loop_forward_compare_state_core_0:
@@ -244,7 +275,7 @@ loop_forward_compare_state_core_2:
 
 
 
-
+force_quit:
     cli
     hlt
     jmp $
