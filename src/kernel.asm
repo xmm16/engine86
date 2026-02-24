@@ -180,7 +180,7 @@ core_0:
 
 core_0_update:
     
-; shift escape to see if the program needs to be killed
+; shift escape then program needs to be killed
 force_quit_check:
     in al, 0x64
     test al, 1
@@ -276,6 +276,18 @@ loop_forward_compare_state_core_2:
 
 
 force_quit:
+    mov ebp, lfb_addr + (WIDTH * HEIGHT)
+    mov esp, lfb_addr
+
+set_screen_to_black:
+    cmp esp, ebp
+    je actual_force_quit
+
+    mov byte [esp], 0x00
+    inc esp
+    jmp set_screen_to_black
+
+actual_force_quit:
     cli
     hlt
     jmp $
