@@ -132,11 +132,20 @@ ap_pm_entry:
 
 graphics: ; each core jumps to this in between updating, including inactive for calculation cores, so divide by the num_cores
 
+
+
+    lock dec dword [state]
+loop_back_compare_state:
+    cmp dword [state], 0
+    jne lock_back_compare_state
+    ret
+
 parallel:
 ; ebx is initialized to core register
     mov ebp, esp
-    lock inc num_cores 
+    lock inc dword [num_cores]
 
+    and esp, -4 ; aligns to 4 bytes
     %define CORE_ID ebp-4
     push ebx
 
@@ -148,14 +157,75 @@ parallel:
 
     cmp ebx, 0
     je core_0
+    cmp ebx, 1
+    je core_1
+    cmp ebx, 2
+    je core_2
 
+    jmp core_unassigned
 
 ; ok so basically here we define objects owned by cores
 ; you don't have to use all cores
-; in each core, you have to use graphics
+; in each core, you have to call the graphics function, then do the updating calculations
+; then it jumps back to wherever
 
 core_0:
     ; define objects of triangles here
+    ; then have an infinite loop while calling graphics after all calculations
+
+core_0_update:
+
+
+
+    lock inc dword [state]
+loop_forward_compare_state_core_0:
+    cmp dword [state], dword [num_cores]
+    jne loop_forward_compare_state_core_0
+    call graphics
+
+core_1:
+    ; define objects of triangles here
+    ; then have an infinite loop while calling graphics after all calculations
+
+core_1_update:
+
+
+
+    lock inc dword [state]
+loop_forward_compare_state_core_1:
+    cmp dword [state], dword [num_cores]
+    jne loop_forward_compare_state_core_1
+    call graphics
+
+core_2:
+    ; define objects of triangles here
+    ; then have an infinite loop while calling graphics after all calculations
+
+core_2_update:
+
+
+
+    lock inc dword [state]
+loop_forward_compare_state_core_2:
+    cmp dword [state], dword [num_cores]
+    jne loop_forward_compare_state_core_2
+    call graphics
+
+
+core_unassigned:
+    lock inc dword [state]
+loop_forward_compare_state_core_2:
+    cmp dword [state], dword [num_cores]
+    jne loop_forward_compare_state_core_2
+    call graphics
+    jmp core_unassigned
+
+
+
+
+
+
+
 
     cli
     hlt
